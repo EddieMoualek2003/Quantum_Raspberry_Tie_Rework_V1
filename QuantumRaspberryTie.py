@@ -91,6 +91,28 @@
     #       Move the QASM code into an outside file
     #
     #----------------------------------------------------------------------
+
+# --------------------------- Globals used in setting up configuration and running
+    
+            #Initialize then check command arguments 
+NoHat   =   False
+UseEmulator = False
+DualDisplay = False
+DualNEO = True
+QWhileThinking = True
+UseTee = False
+UseHex = False
+UseQ16 = False
+UseLocal = True
+UseNeo = False       #enable display via neopixel array
+NeoTiled = True     # Use the tiled Rasqberry LED pixel order. Setting False will use a single 8x32 array
+backendparm = '[localsim]'
+SelectBackend = False #for interactive selection of backend
+fake_name = "FakeManilaV2"
+qubits_needed = 5  #default size for the five-qubit simulation
+AddNoise = False
+debug = False
+qasmfileinput='expt.qasm'
     
 def main():	
     # import most of the necessary modules. A few more will be imported later as configuration is processed.
@@ -130,27 +152,7 @@ def main():
     IBMQVersion = qiskit.__version__
     print(IBMQVersion)
     
-    # --------------------------- Globals used in setting up configuration and running
     
-    #Initialize then check command arguments 
-    NoHat   =   False
-    UseEmulator = False
-    DualDisplay = False
-    DualNEO = True
-    QWhileThinking = True
-    UseTee = False
-    UseHex = False
-    UseQ16 = False
-    UseLocal = True
-    UseNeo = False       #enable display via neopixel array
-    NeoTiled = True     # Use the tiled Rasqberry LED pixel order. Setting False will use a single 8x32 array
-    backendparm = '[localsim]'
-    SelectBackend = False #for interactive selection of backend
-    fake_name = "FakeManilaV2"
-    qubits_needed = 5  #default size for the five-qubit simulation
-    AddNoise = False
-    debug = False
-    qasmfileinput='expt.qasm'
     
     #---------------------- GRAPHICS constants and functions-------------------------------------------
     
