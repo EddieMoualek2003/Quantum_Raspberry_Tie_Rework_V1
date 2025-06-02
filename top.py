@@ -1,2 +1,2 @@
-from QuantumRaspberryTie import *
-main()
+import subprocess
+subprocess.run(["python3", "QuantumRaspberryTie.py"])
