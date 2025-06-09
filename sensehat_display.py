@@ -76,3 +76,7 @@ class SenseHatDisplay(Display):
                     filtered[p] = pixels[p]
 
             self.set_pixels(filtered)
+    def clear(self):
+        """Clear the Sense HAT display."""
+        self.hat.clear()
+
