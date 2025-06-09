@@ -1,3 +1,97 @@
+#----------------------------------------------------------------------
+#     QuantumRaspberryTie.qk1_local
+#       by KPRoche (Kevin P. Roche) (c) 2017,2018,2019,2020,2021,2022.2024
+#
+#
+#   =============== January 2025 Updates ================================================
+#
+#   Adding support to display results on a NeoPixel array, either the tiled 8x24 array of the Rasqberry Two
+#       or a single BTF 8x32 array
+#
+#   New Flags for the input line:
+#       -notile tells the neopixel code to use a continuous neopixel array map rather than the Rasqberry tiled map
+#
+#   New behavior: if neither a SenseHat nor a Sensehat emulator are detected, sets a NoHat flag and skips that code
+#
+#
+# ---------------------  November 2024 Update
+#      
+#     Interactive dialog prompt "-int" added to set up parameters
+#       Added to optimize running automatically on Rasqberry Pi System Two
+#
+#
+#
+#
+#     NEW RELEASE 
+#     April 2024 to accomodate the official release of Qiskit 1.0
+#     using new QiskitRuntime libraries and call techniques;
+#     runs OPENQASM code on an IBM Quantum backend or simulator 
+#     Display the results using the 8x8 LED array on a SenseHat (or SenseHat emulator)
+#     Will Default to local simulator because the cloud simulator is being retired.
+#
+#     Will Connect and authenticate to the IBM Quantum platform via the QiskitRuntime module (if necessary)
+#     
+#        NEW default behavior:
+#               Spins up a 5-qubit test backend (local simulator) based on FakeManilaV2
+#                   in a "bowtie" arrangement based on older processors
+#               New Qiskit-logo inspired "thinking" graphic
+#        NEW backend options:
+#           -b:aer | spins up a local Aer simulator
+#           -b:aer_noise or -b:aer_model | spins up a local Aer simulator with a noise model 
+#               based on the least busy real processor for your account (this does require access to
+#               the IBM Quantum processors and account credentials properly saved via QiskitRuntime
+#           -b:least | will run code once on the least busy *real* backend for your account
+#               NOTE: this may take hours before the result returns
+#           -b:[backend_name] | will use the specified backend if it is available (see note above)
+#        NEW display options
+#           NOTE: if multiple options are specified the last one in the parameters will be applied
+#           hex or -hex | displays on a 12 qubit pattern 
+#                    (topologically identical to the heavy hex in IBM processors) 
+#           d16 or -d16 | displays on a 16 qubit pattern
+#               NOTE: overrides default or tee option for 5 qubit code!
+#               NOTE: if your quantum circuit has fewer qubits than available in the display mode, 
+#                   unmeasured qubits will be displayed in purple
+#
+#        NEW interactive options 
+#           -input | prompts you to add more parameters to what was on the command line
+#           -select | prompts you for the backend option before initializing
+#        OTHER options:
+#           -tee | switches to a tee-shaped 5-qubit arrangement
+#           -16 or 16 | loads a 16-qubit QASM file and switches to a 16-bit display arrangement
+#               NOTE: hex display mode will override the 16 qubit display and show only the first 12
+#           -noq | does not show a logo during the rainbow "thinking" moment; instead rainbows the qubit display
+#           -e | will attempt to spin up a SenseHat emulator display on your desktop. 
+#           -d | will attempt to display on BOTH the SenseHat and a emulator display
+#               These require that both the libraries and a working version of the emulator executable be present
+#           -f:filename load an alternate QASM file
+# ----------------------------- pre Qiskit 1.0 History -----------------------
+#
+#     April 2023 -- added dual display option. If sensehat is available, will spin up a second emulator to show
+#                    on the desktop
+#     Nov 2022 -- Cleaned up -local option to run a local qasm simulator if supported
+#
+#     Feb 2020 -- Added fix to IBM Quantum Experience URL (Thanks Jan Lahman)
+#
+#     October 2019 -- added extra command line parameters. Can force use of Sensehat emulator, or specify backend
+#                        (specifying use of a non-simulator backend will disable loop)
+#     October 2019 -- will attempt to load SenseHat and connect to hardware.
+#                        If that fails, then loads and launches SenseHat emulator for display instead
+#
+#     September 2019 -- adaptive version can use either new (0.3) ibmq-provider with provider object
+#                         or older (0.2) IBMQ object
+#     July 2019 -- convert to using QISKIT full library authentication and quantum circuit
+#                    techniques
+#     March 2018 -- Detect a held center switch on the SenseHat joystick to trigger shutdown
+#     
+#     Original (2017) version
+#       Spin off the display functions in a separate thread so they can exhibit
+#             smooth color changes while "thinking"
+#       Use a ping function to try to make sure the website is available before
+#             sending requests and thus avoid more hangs that way
+#       Move the QASM code into an outside file
+#
+#----------------------------------------------------------------------
+
 
 # import most of the necessary modules. A few more will be imported later as configuration is processed.
 print("importing libraries...")
@@ -29,7 +123,7 @@ print("       ....warnings")
 import warnings
 print("       ....numpy as np for building pixel maps ")
 import numpy as np
-
+from tie_functions import set_hat
 
 
 #AccountException=accounts.exception(AccountNotFoundError)
@@ -48,7 +142,7 @@ UseTee = False
 UseHex = False
 UseQ16 = False
 UseLocal = True
-UseNeo = False       #enable display via neopixel array
+UseNeo = True       #enable display via neopixel array
 NeoTiled = True     # Use the tiled Rasqberry LED pixel order. Setting False will use a single 8x32 array
 backendparm = '[localsim]'
 SelectBackend = False #for interactive selection of backend
@@ -68,10 +162,7 @@ qasmfileinput='expt.qasm'
 #              
 #   the color shift effect is based on the rainbow example included with the SenseHat library
 #-------------------------------------------------------------------------------
-
 from tie_patterns import *
-from tie_functions import *
-
 # pixel coordinates to draw the bowtie qubits or the 16 qubit array
 ibm_qx5 = ibm_qx5_func()
 ibm_qx5t = ibm_qx5t_func()
@@ -94,8 +185,6 @@ Arrow = Arrow_func()
 
 # setting up the 8x8=64 pixel variables for color shifts
 # This is a basic "rainbow wash" across the 8x8 set
-
-
 hues = hues_func()
 
 # These two lines initialize our working arrays for the display
@@ -103,12 +192,36 @@ pixels = [hsv_to_rgb(h, 1.0, 1.0) for h in hues]
 qubits = pixels
 
 # scale lets us do a simple color rotation of hues and convert it to RGB in pixels
-
 # LED array indices to map to pixel list
 RQ2_array_indices = RQ2_array_indices_func()
 
 # LED array indices for 8x32 single array
 LED8x32_indices = LED8x32_indices_func()
+
+# Generate a pixel indices map for a DTF LED array, with a column offset
+
+def create_matrix_map(n, offset=0):
+    # Create an n x n array from 0 - (n^2)-1
+    if offset:
+        temp_matrix = np.arange((offset * n), (n**2) + (offset * n)).reshape(n, n)
+    else:
+        temp_matrix = np.arange(0, (n**2)).reshape(n, n)
+
+    # Iterate through each row. If it's odd, reverse it
+    for index, col in enumerate(temp_matrix):
+        if offset:
+            if (index + offset) % 2 != 0:
+                temp_matrix[index] = col[::-1]
+        else:
+            if index % 2 != 0:
+                temp_matrix[index] = col[::-1]
+
+    # Transpose the matrix, then convert to 1-D array
+    matrix_map = temp_matrix.T
+
+    matrix_map = matrix_map.flatten()
+
+    return matrix_map
 
 
 if DualNEO: matrix_map = create_matrix_map(8, 5)
@@ -116,9 +229,138 @@ else:       matrix_map = create_matrix_map(8,8)
 matrix_map2 = create_matrix_map(8, 16)
 
 
+#----------------------------------------------------------------------------
+#       Create a SVG rendition of the pixel array
+#----------------------------------------------------------------------------
+def svg_pixels(pixel_list, brighten=1):
+    # Create canvas
+    svg_inline = '<svg width="128" height="128" version="1.1" xmlns="http://www.w3.org/2000/svg">\n'
+    # fill canvas with black background
+    #svg_inline = svg_inline +   '<rect x="0" y="0" width="128" height="128" stroke="black" fill="black" stroke-width="0"/>\n'
+    # iterate through the list
+    for i in range(64):
+        # get the coordinates
+        x = 4 * 4 * (i % 8)
+        y = 4 * 4 * (i//8)
+        pixel=pixel_list[i]
+        red=pixel[0]
+        green=pixel[1]
+        blue=pixel[2]
+        if brighten > 0:
+            red = min(int(red * brighten),255)
+            green = min(int(green * brighten),255)
+            blue = min(int(blue * brighten),255)
+        # build the "pixel" rectangle and append it
+        pixel_str=f'<rect x="{x}" y="{y}" fill="rgb({red},{green},{blue})" width="16" height="16" stroke="white" stroke-width="1"/>\n'
+        svg_inline = svg_inline + pixel_str
+
+    #close the svg
+    svg_inline = svg_inline + "</svg>"
+        
+    return svg_inline
+
+#------------------------------------------------------------------
+#	Write the SVG out as a file
+#------------------------------------------------------------------    
+def write_svg_file(pixels, label='0000', brighten=1, init=False):
+    # This uses multiple files to create the webpage qubit display:
+    # qubits.html is only written if init is True
+    #      It contains the refresh command and the html structure, and pulls in the other two
+    # pixels.svg holds the display pattern
+    # pixels.lbl holds the caption
+    if init:
+        print("initializing html wrapper for svg display")
+        try: #create the svg directory if it doesn't exist yet
+            os.mkdir(r'./svg')
+        except OSError as error:
+            print(error)
+        html_file = open (r'./svg/qubits.html',"w")
+        browser_str='''<!DOCTYPE html>\r<html>\r<head>\r
+                                <title>SenseHat Display</title>\r
+                                <meta http-equiv="refresh" content="2.5">\r
+                                </head>\r<body>\r
+                                <h3>Latest Display on RPi SenseHat</h3>\r
+                                <object data="pixels.html"  width='400' height='500'/ >\r
+                                </body></html>'''
+        #browser_str = browser_str + '<br> Qubit Pattern: ' + label + '</body></html>'
+        html_file.write(browser_str)
+        html_file.close()        
+       
+    svg_file = open (r'./svg/pixels.html',"w")
+    #lbl_file = open (r'./svg/pixels.lbl',"w")
+    #browser_str='''<!DOCTYPE html>\r<html>\r<head>\r
+    #                            <title>SenseHat Display</title>\r
+    #                            <meta http-equiv="refresh" content="1">\r
+    #                            </head>\r<body>\r
+    #                            <h3>Latest Display on RPi SenseHat</h3>'''
+    browser_str= svg_pixels(pixels, brighten) + '\r <br/>Qubit Pattern: ' + label + '<br/><br/>\r'
+    svg_file.write(browser_str)
+    svg_file.close()  
+    #browser_str = 'Qubit Pattern: ' + label + '\r'
+    #lbl_file.write(browser_str)
+    #lbl_file.close()      
+
+#-- scale lets us scale a fraction of 255
+def scale(v):
+    return int(v * 255)
+
+# -- resetrainbow resets an 8x8 array of 3-value pixels back to the basic wash set up in hues
+def resetrainbow(show=False):
+   global pixels,hues
+   pixels = [hsv_to_rgb(h, 1.0, 1.0) for h in hues]
+   pixels = [(scale(r), scale(g), scale(b)) for r, g, b in pixels]
+   if (show):
+       if not NoHat: hat.set_pixels(pixels)
+       if DualDisplay and not NoHat: hat2.set_pixels(pixels)
+
+def display_to_LEDs(pixel_list, LED_array_indices):
+    for index, pixel in enumerate(pixel_list):
+        # Get RGB data from pixel list
+        red, green, blue = pixel[0], pixel[1], pixel[2]
+
+        # Get the corresponding index position on the LED array
+        LED_index = LED_array_indices[index]
+
+        # Set the appropriate pixel to the RGB value
+        9[LED_index] = (red, green, blue)
+
+    # Display image after all pixels have been set
+    
+    neopixel_array.show()
 
 
+#----------------------------------------------------------------
+# Set the display size and rotation And turn on the display with an mask logo
+#----------------------------------------------------------------
+def orient():
+    global hat,angle, DualDisplay
+    if not NoHat:
+        acceleration = hat.get_accelerometer_raw()
+        x = acceleration['x']
+        y = acceleration['y']
+        z = acceleration['z']
+        x=round(x, 0)
+        y=round(y, 0)
+        z=round(z, 0)
+        print("current acceleration: ",x,y,z)
 
+        if y == -1:
+            angle = 180
+        elif y == 1 or (SenseHatEMU and not DualDisplay):
+            angle = 0
+        elif x == -1:
+            angle = 90
+        elif x == 1:
+            angle = 270
+        #else:
+            #angle = 180
+    else:
+        angle = 0
+    print("angle selected:",angle)
+    
+
+    if not NoHat: hat.set_rotation(angle)
+    if not NoHat and DualDisplay: hat2.set_rotation(0)
 
 
 # -- showqubits maps a bit pattern (a string of up to 16 0s and 1s) onto the current display template
@@ -644,89 +886,9 @@ if (len(sys.argv)>1):
              
 
 
-
 #-------------------   Step 2: Set up SenseHat or alternative for display
-
-# Now we are going to try to instantiate the SenseHat as a display device, unless we have asked for the emulator.
-# if it fails, we'll try loading the emulator 
-# This is also where we can expand the display device options
-SenseHatEMU = False
-hatcounter = 0
-if not UseEmulator:
-    print ("... importing SenseHat and looking for hardware")
-    try:
-        from sense_hat import SenseHat
-        hat = SenseHat() # instantiating hat right away so we can use it in functions
-    except:
-        print ("... problem finding SenseHat")
-        UseEmulator = True
-        print("       ....trying SenseHat Emulator instead")
-
-if UseEmulator:
-    print ("....importing SenseHat Emulator")
-    try: 
-        from sense_emu import SenseHat         # class for controlling the SenseHat emulator. API is identical to the real SenseHat class
-        hat = SenseHat() # instantiating hat emulator so we can use it in functions
-        while not SenseHatEMU:
-            try:	#This function will error if the emulator program hasn't started
-                hat.set_imu_config(True,True,True) #initialize the accelerometer simulation
-                print("waiting for SenseHat emulator to start: iteration ",hatcounter,"/60")
-            except:
-                sleep(1)
-                hatcounter += 1
-            else:
-                SenseHatEMU = True
-                if hatcounter >=10: NoHat = True
-    except:
-        NoHat = True
-            
-if UseNeo:
-    print("importing neopixel library...")
-    try:
-        import board
-        import neopixel_spi as neopixel
-    except Exception as e:
-        print("Error importing neopixel library: ", e)
-    try:
-        # Neopixel constants
-        if NeoTiled: 
-            NUM_PIXELS = 192
-            PIXEL_ORDER = neopixel.RGB
-        else: 
-            NUM_PIXELS = 256
-            PIXEL_ORDER = neopixel.GRB
-        BRIGHTNESS = 0.10
-
-        # Neopixel initialization
-        spi = board.SPI()
-
-        neopixel_array = neopixel.NeoPixel_SPI(
-            spi,
-            NUM_PIXELS,
-            pixel_order=PIXEL_ORDER,
-            brightness=BRIGHTNESS,
-            auto_write=False,
-        )
-        #neopixel_array.clear()
-        #neopixel_array.show()
-    except Exception as e:
-        print("Error initilizating Neopixel board: ", e)
-
-else:
-    if DualDisplay: # if you have a Sensehat but want the emulator running also. 
-		#Note that the svg file is always written, so you can open the ./svg/qubits.html file instead 
-		#	to see the qubit display instead of using the emulator for a second display
-        from sense_emu import SenseHat         # class for controlling the SenseHat
-        hat2 = SenseHat() # instantiating hat emulator so we can use it in functions
-        while not SenseHatEMU:
-            try:
-                hat2.set_imu_config(True,True,True) #initialize the accelerometer simulation
-            except:
-                sleep(1)
-            else:
-                SenseHatEMU = True
-if NeoTiled:    LED_array_indices = RQ2_array_indices
-else:           LED_array_indices = matrix_map
+## Replace the global handling of the hat function with a function call that takes them as parameters.
+[hat, hat2, LED_array_indices, SenseHatEMU] = set_hat(UseEmulator, UseNeo, NeoTiled, matrix_map, RQ2_array_indices)
 
 
 # Initial some more working variables and settings we are going to need 
