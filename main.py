@@ -9,7 +9,8 @@ def main():
     print("Starting Quantum Raspberry Tie Demo")
 
     # --- Choose display type here ---
-    display = display_factory(use_emulator=True)
+    # display = display_factory(use_emulator=True)
+    display = display_factory(use_svg=True)
     display.initialize()
 
     # --- Set up quantum experiment ---
